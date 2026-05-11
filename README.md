@@ -183,23 +183,3 @@ The app is deployed on AWS EC2. Every push to `main` triggers the GitHub Actions
 4. Restarts the service
 
 ---
-
-## Load Testing
-
-Run Locust to simulate 500 concurrent users:
-
-```bash
-pip install locust
-locust -f locustfile.py --host=http://your-server-ip:8000
-```
-
-Open `http://localhost:8089`, set 500 users, ramp up 10/second, click Start.
-
----
-
-## Resume Bullets
-
-- Built AI-augmented project management platform using FastAPI and PostgreSQL, integrating NLP model for automatic task prioritization across user-created workflows
-- Designed JWT authentication system with bcrypt password hashing supporting multi-user project and task management
-- Containerized application with Docker and deployed on AWS EC2 with automated CI/CD pipeline via GitHub Actions
-- Validated system performance under 500 concurrent users using Locust load testing framework
