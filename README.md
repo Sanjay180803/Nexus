@@ -23,7 +23,7 @@ A full-stack project management platform where an NLP model automatically assign
 | Backend | FastAPI (Python) |
 | Database | PostgreSQL + SQLAlchemy |
 | Authentication | JWT tokens + bcrypt |
-| NLP | HuggingFace Transformers (keyword-based priority scoring) |
+| NLP | HuggingFace Transformers (facebook/bart-large-mnli zero-shot classification) |
 | Frontend | React + Tailwind CSS + Vite |
 | Containerization | Docker + Docker Compose |
 | Deployment | AWS EC2 (Ubuntu) |
