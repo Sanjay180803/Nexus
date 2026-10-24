@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nexus_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexus_test
+      SECRET_KEY: ci-only-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      # The zero-shot model (torch + transformers) is stubbed in tests,
+      # so CI skips installing it.
+      - name: Install dependencies
+        run: |
+          grep -vE '^(torch|transformers)' requirements.txt > /tmp/req-ci.txt
+          pip install -r /tmp/req-ci.txt pytest
+      - run: pytest tests -v
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexus-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: nexus-frontend/package-lock.json
+      # package-lock.json is out of sync with package.json; switch to `npm ci`
+      # after regenerating the lock file with `npm install`.
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
