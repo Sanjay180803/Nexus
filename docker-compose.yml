@@ -1,4 +1,4 @@
-version: "3.9"
+# Reads secrets from .env (copy .env.example to .env first).
 
 services:
 
@@ -6,9 +6,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-      POSTGRES_DB: taskmanager
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-taskmanager}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -22,10 +22,10 @@ services:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgresql://postgres:postgres123@db:5432/taskmanager
-      SECRET_KEY: your-super-secret-key-change-this
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 10080
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-taskmanager}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
 
 volumes:
   postgres_data:
