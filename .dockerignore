@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+*.pem
+*.key
+venv/
+.venv/
+__pycache__/
+*.pyc
+nexus-frontend/node_modules/
+nexus-frontend/dist/
