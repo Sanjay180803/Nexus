@@ -1,70 +1,74 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models.models import Task, Project, User, Priority
-from app.core.security import decode_token
-from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
 from typing import Optional
-from transformers import pipeline
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_current_user, parse_uuid
+from app.database import get_db
+from app.models.models import Priority, Project, Task, User
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-# Load NLP model once when server starts
-print("Loading NLP model... this takes ~30 seconds on first run")
-classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
-print("NLP model loaded!")
-
 PRIORITY_LABELS = ["low priority", "medium priority", "high priority", "critical priority"]
+NLP_MODEL = "facebook/bart-large-mnli"
+
+_classifier = None
+
+
+def _get_classifier():
+    """Load the zero-shot model on first use rather than at import time,
+    so tests and tooling can import the app without downloading it."""
+    global _classifier
+    if _classifier is None:
+        from transformers import pipeline
+
+        _classifier = pipeline("zero-shot-classification", model=NLP_MODEL)
+    return _classifier
+
 
 def get_priority_from_nlp(text: str) -> Priority:
-    result = classifier(text, PRIORITY_LABELS)
+    result = _get_classifier()(text, PRIORITY_LABELS)
     top_label = result["labels"][0]
     if "critical" in top_label:
         return Priority.critical
-    elif "high" in top_label:
+    if "high" in top_label:
         return Priority.high
-    elif "medium" in top_label:
+    if "medium" in top_label:
         return Priority.medium
-    else:
-        return Priority.low
+    return Priority.low
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = decode_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    user = db.query(User).filter(User.id == payload["sub"]).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
+
+def _owned_project(project_id: str, user: User, db: Session) -> Project:
+    project = db.query(Project).filter(
+        Project.id == parse_uuid(project_id, "Project"),
+        Project.owner_id == user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
 
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
+
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     completed: Optional[bool] = None
 
+
 @router.post("/{project_id}/tasks")
 def create_task(
     project_id: str,
     payload: TaskCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    # Check project exists and belongs to user
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = _owned_project(project_id, current_user, db)
 
-    # Use NLP to assign priority
     text = f"{payload.title}. {payload.description or ''}"
     priority = get_priority_from_nlp(text)
 
@@ -72,7 +76,7 @@ def create_task(
         title=payload.title,
         description=payload.description,
         priority=priority,
-        project_id=project_id
+        project_id=project.id,
     )
     db.add(task)
     db.commit()
@@ -84,33 +88,29 @@ def create_task(
         "description": task.description,
         "priority": task.priority,
         "completed": task.completed,
-        "ai_assigned_priority": True
+        "ai_assigned_priority": True,
     }
+
 
 @router.get("/{project_id}/tasks")
 def get_tasks(
     project_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    tasks = db.query(Task).filter(Task.project_id == project_id).all()
+    project = _owned_project(project_id, current_user, db)
+    tasks = db.query(Task).filter(Task.project_id == project.id).all()
     return [
         {
             "id": str(t.id),
             "title": t.title,
             "description": t.description,
             "priority": t.priority,
-            "completed": t.completed
+            "completed": t.completed,
         }
         for t in tasks
     ]
+
 
 @router.patch("/{project_id}/tasks/{task_id}")
 def update_task(
@@ -118,9 +118,15 @@ def update_task(
     task_id: str,
     payload: TaskUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    task = db.query(Task).filter(Task.id == task_id, Task.project_id == project_id).first()
+    # Previously this looked the task up by id and project id only, so any
+    # logged-in user could edit another user's task. Check ownership first.
+    project = _owned_project(project_id, current_user, db)
+    task = db.query(Task).filter(
+        Task.id == parse_uuid(task_id, "Task"),
+        Task.project_id == project.id,
+    ).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
