@@ -1,18 +1,22 @@
-# Nexus — AI-Augmented Project Management Platform
+# Nexus — AI-Assisted Project Management
 
-A full-stack project management platform where an NLP model automatically assigns priority scores to tasks based on their descriptions. Built with FastAPI, PostgreSQL, React, Docker, and deployed on AWS EC2.
+A full-stack project management app where a zero-shot NLP model assigns a
+priority to each new task from its title and description. FastAPI,
+PostgreSQL, React, Docker, deployed to AWS EC2 through GitHub Actions.
 
 ---
 
 ## Features
 
-- **User Authentication** — Register and login with JWT tokens and bcrypt password hashing
-- **Project Management** — Create and manage multiple projects per user
-- **AI Task Prioritization** — NLP model reads task descriptions and automatically assigns Low / Medium / High / Critical priority
-- **REST API** — Full CRUD API with auto-generated Swagger docs at `/docs`
-- **Containerized** — Entire stack runs with a single `docker compose up`
-- **CI/CD** — Auto-deploys to AWS EC2 on every push to `main` via GitHub Actions
-- **Load Tested** — Validated under 500 concurrent users using Locust
+- **Authentication**: registration and login with bcrypt-hashed passwords and JWT bearer tokens
+- **Projects and tasks**: each user sees only their own projects; tasks belong to a project and can be edited or completed
+- **AI task prioritization**: `facebook/bart-large-mnli` zero-shot classification labels each new task Low / Medium / High / Critical
+- **REST API** with Swagger docs at `/docs`
+- **Database migrations** with Alembic
+- **Tests and CI**: pytest suite against Postgres in GitHub Actions, plus a frontend build check
+- **Docker Compose** for the backend and Postgres
+- **Deployment workflow** to AWS EC2 on push to `main`
+- **Load test** definition in `locustfile.py`
 
 ---
 
@@ -21,14 +25,47 @@ A full-stack project management platform where an NLP model automatically assign
 | Layer | Technology |
 |---|---|
 | Backend | FastAPI (Python) |
-| Database | PostgreSQL + SQLAlchemy |
-| Authentication | JWT tokens + bcrypt |
-| NLP | HuggingFace Transformers (facebook/bart-large-mnli zero-shot classification) |
+| Database | PostgreSQL, SQLAlchemy, Alembic |
+| Authentication | JWT (python-jose) + bcrypt (passlib) |
+| NLP | Hugging Face Transformers, `facebook/bart-large-mnli` zero-shot classification |
 | Frontend | React + Tailwind CSS + Vite |
 | Containerization | Docker + Docker Compose |
-| Deployment | AWS EC2 (Ubuntu) |
-| CI/CD | GitHub Actions |
-| Load Testing | Locust |
+| Deployment | AWS EC2 (Ubuntu) via GitHub Actions |
+| Testing | pytest, Locust |
+
+---
+
+## Data model
+
+```mermaid
+erDiagram
+    USER ||--o{ PROJECT : owns
+    PROJECT ||--o{ TASK : contains
+    USER {
+        uuid id PK
+        string email UK
+        string username UK
+        string hashed_password
+        bool is_active
+        datetime created_at
+    }
+    PROJECT {
+        uuid id PK
+        string name
+        text description
+        uuid owner_id FK
+        datetime created_at
+    }
+    TASK {
+        uuid id PK
+        string title
+        text description
+        enum priority "low | medium | high | critical"
+        bool completed
+        uuid project_id FK
+        datetime created_at
+    }
+```
 
 ---
 
@@ -39,24 +76,22 @@ nexus/
 ├── app/
 │   ├── main.py               # FastAPI app entrypoint
 │   ├── database.py           # SQLAlchemy engine and session
-│   ├── models/
-│   │   └── models.py         # User, Project, Task ORM models
+│   ├── models/models.py      # User, Project, Task ORM models
 │   ├── routers/
 │   │   ├── auth.py           # /auth/register, /auth/login, /auth/me
-│   │   ├── projects.py       # CRUD for projects
-│   │   └── tasks.py          # CRUD for tasks + NLP priority scoring
+│   │   ├── projects.py       # project endpoints
+│   │   └── tasks.py          # task endpoints + NLP priority scoring
 │   └── core/
+│       ├── deps.py           # current-user dependency
 │       └── security.py       # JWT + bcrypt utilities
-├── nexus-frontend/           # React frontend
-│   └── src/
-│       └── App.jsx           # Single-page app (login, projects, tasks)
-├── Dockerfile                # Backend container
-├── docker-compose.yml        # Backend + PostgreSQL services
-├── locustfile.py             # Load test (500 concurrent users)
-├── .github/
-│   └── workflows/
-│       └── deploy.yml        # GitHub Actions CI/CD pipeline
-└── requirements.txt
+├── migrations/               # Alembic migrations
+├── tests/                    # pytest suite
+├── nexus-frontend/           # React frontend (single-page app)
+├── locustfile.py             # load test
+├── Dockerfile                # backend image (runs migrations, then uvicorn)
+├── docker-compose.yml        # backend + PostgreSQL
+├── .env.example              # copy to .env
+└── .github/workflows/        # CI, migration checks, EC2 deploy
 ```
 
 ---
@@ -66,120 +101,133 @@ nexus/
 ### Prerequisites
 - Python 3.11+
 - Node.js 20+
-- PostgreSQL
-- Docker (optional)
+- PostgreSQL 16 (or Docker)
 
-### Run Locally (without Docker)
+### Run locally
 
-**1. Clone the repo**
 ```bash
 git clone https://github.com/Sanjay180803/Nexus.git
 cd Nexus
-```
 
-**2. Set up Python environment**
-```bash
 python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # Mac/Linux
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-**3. Configure environment**
-```bash
-# Create .env file
-DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/taskmanager
-SECRET_KEY=your-secret-key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=10080
-```
+cp .env.example .env              # set DATABASE_URL and SECRET_KEY
+createdb taskmanager              # or CREATE DATABASE in psql
+alembic upgrade head
 
-**4. Create the database**
-```bash
-psql -U postgres
-CREATE DATABASE taskmanager;
-\q
-```
-
-**5. Start the backend**
-```bash
 uvicorn app.main:app --reload
 ```
 
-**6. Start the frontend**
+In a second terminal:
+
 ```bash
 cd nexus-frontend
 npm install
 npm run dev
 ```
 
-Visit `http://localhost:5173` for the app or `http://localhost:8000/docs` for the API.
+App: http://localhost:5173 · API docs: http://localhost:8000/docs
 
----
+The first task you create downloads the ~1.6 GB `bart-large-mnli` model.
 
 ### Run with Docker
 
 ```bash
+cp .env.example .env              # set POSTGRES_PASSWORD and SECRET_KEY
 docker compose up --build
 ```
 
-API available at `http://localhost:8000`
+API at http://localhost:8000. The container applies migrations before starting.
+
+---
+
+## Tests
+
+```bash
+pip install pytest
+pytest tests -v
+```
+
+Tests use SQLite by default and Postgres when `DATABASE_URL` points at it.
+The NLP model is replaced with a deterministic stub, so tests do not
+download it. CI runs the suite against Postgres 16 on every pull request.
 
 ---
 
 ## API Endpoints
 
+All endpoints except register and login need `Authorization: Bearer <token>`.
+
 ### Auth
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/auth/register` | Create a new account |
-| POST | `/auth/login` | Login and receive JWT token |
-| GET | `/auth/me` | Get current user info |
+| POST | `/auth/register` | Create an account |
+| POST | `/auth/login` | Log in and receive a JWT |
+| GET | `/auth/me` | Current user's id, email, username |
 
 ### Projects
 | Method | Endpoint | Description |
 |---|---|---|
 | POST | `/projects/` | Create a project |
-| GET | `/projects/` | List all your projects |
-| GET | `/projects/{id}` | Get a single project |
+| GET | `/projects/` | List your projects |
+| GET | `/projects/{id}` | Get one of your projects |
 
 ### Tasks
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/tasks/{project_id}/tasks` | Create task (AI assigns priority) |
-| GET | `/tasks/{project_id}/tasks` | List all tasks in a project |
-| PATCH | `/tasks/{project_id}/tasks/{task_id}` | Update a task |
+| POST | `/tasks/{project_id}/tasks` | Create a task (model assigns priority) |
+| GET | `/tasks/{project_id}/tasks` | List tasks in a project |
+| PATCH | `/tasks/{project_id}/tasks/{task_id}` | Update title, description, or completion |
 
 ---
 
 ## AI Priority Scoring
 
-When a task is created, the description is analyzed and automatically assigned one of four priority levels:
+When a task is created, `"{title}. {description}"` is passed to the
+`facebook/bart-large-mnli` zero-shot classifier with four candidate labels:
+`low priority`, `medium priority`, `high priority`, `critical priority`.
+The highest-scoring label becomes the task's priority. There is no keyword
+list; the model scores the text against each label.
 
-| Priority | Example keywords |
-|---|---|
-| Critical | crash, down, security, breach, emergency |
-| High | bug, error, broken, fail, fix |
-| Medium | update, improve, feature, add |
-| Low | everything else |
-
-Example:
+Example request:
 ```json
 {
   "title": "Server is down",
   "description": "Production database crashed, all users locked out"
 }
 ```
-Response: `"priority": "critical"`
+
+The model is loaded once, on the first task creation, and kept in memory.
+Classification runs synchronously on CPU, so task creation is the slowest
+endpoint.
+
+Not yet measured: agreement between the model's labels and human-assigned
+priorities.
+
+---
+
+## Load testing
+
+`locustfile.py` simulates users who register, create a project, list
+projects and tasks, create tasks (which runs the model), and complete them.
+
+```bash
+pip install locust
+locust -f locustfile.py --host http://localhost:8000 \
+       --users 100 --spawn-rate 10 --run-time 2m --headless \
+       --csv benchmarks/locust
+```
+
+Results are written to `benchmarks/locust_stats.csv`. Record the hardware
+and whether the real model or a stub was used alongside any numbers.
 
 ---
 
 ## Deployment
 
-The app is deployed on AWS EC2. Every push to `main` triggers the GitHub Actions workflow which:
-1. SSHs into the EC2 instance
-2. Pulls the latest code
-3. Rebuilds the Docker container
-4. Restarts the service
-
----
+`.github/workflows/deploy.yml` runs on every push to `main`. It SSHes into
+the EC2 host (`EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY` repository secrets),
+pulls the latest code, and rebuilds the Docker Compose stack. The server
+needs its own `.env` next to `docker-compose.yml`.
