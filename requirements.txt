@@ -10,3 +10,4 @@ pydantic[email]
 transformers
 torch
 httpx
+alembic
