@@ -1,8 +1,18 @@
+# Python
 venv/
+.venv/
 __pycache__/
 *.pyc
-.env
+.pytest_cache/
 *.db
+
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Frontend
 node_modules/
 dist/
-.pytest_cache/
