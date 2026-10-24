@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-sqlalchemy
+sqlalchemy>=2.0,<2.1  # 2.1 defaults postgresql:// to psycopg 3; this project uses psycopg2
 psycopg2-binary
 python-jose[cryptography]
 passlib[bcrypt]==1.7.4
@@ -10,3 +10,4 @@ pydantic[email]
 transformers
 torch
 httpx
+alembic

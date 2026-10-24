@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import User
+from app.core.deps import get_current_user
 from app.core.security import hash_password, verify_password, create_access_token
 from pydantic import BaseModel, EmailStr
 
@@ -47,5 +48,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return {"access_token": token, "token_type": "bearer"}
 
 @router.get("/me")
-def me(db: Session = Depends(get_db)):
-    return {"message": "This will return current user info in next step"}
+def me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "username": current_user.username,
+        "created_at": current_user.created_at,
+    }
