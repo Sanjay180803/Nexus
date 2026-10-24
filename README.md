@@ -87,11 +87,7 @@ pip install -r requirements.txt
 
 **3. Configure environment**
 ```bash
-# Create .env file
-DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/taskmanager
-SECRET_KEY=your-secret-key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=10080
+cp .env.example .env    # then edit the values; .env is git-ignored
 ```
 
 **4. Create the database**
@@ -120,6 +116,7 @@ Visit `http://localhost:5173` for the app or `http://localhost:8000/docs` for th
 ### Run with Docker
 
 ```bash
+cp .env.example .env    # set POSTGRES_PASSWORD and SECRET_KEY
 docker compose up --build
 ```
 
