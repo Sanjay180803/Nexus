@@ -1,9 +1,9 @@
 name: Deploy to AWS
 
 on:
-  push:
-    branches:
-      - main
+  # Manual only: the EC2 host is not running, so deploying on every
+  # push to main would fail each time.
+  workflow_dispatch:
 
 jobs:
   deploy:
