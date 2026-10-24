@@ -2,7 +2,7 @@
 
 A full-stack project management app where a zero-shot NLP model assigns a
 priority to each new task from its title and description. FastAPI,
-PostgreSQL, React, Docker, deployed to AWS EC2 through GitHub Actions.
+PostgreSQL, React and Docker. It was previously deployed to AWS EC2 through GitHub Actions.
 
 ---
 
@@ -15,7 +15,7 @@ PostgreSQL, React, Docker, deployed to AWS EC2 through GitHub Actions.
 - **Database migrations** with Alembic
 - **Tests and CI**: pytest suite against Postgres in GitHub Actions, plus a frontend build check
 - **Docker Compose** for the backend and Postgres
-- **Deployment workflow** to AWS EC2 on push to `main`
+- **Deployment workflow** for AWS EC2 (manual trigger)
 - **Load test** definition in `locustfile.py`
 
 ---
@@ -227,7 +227,6 @@ and whether the real model or a stub was used alongside any numbers.
 
 ## Deployment
 
-`.github/workflows/deploy.yml` runs on every push to `main`. It SSHes into
-the EC2 host (`EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY` repository secrets),
-pulls the latest code, and rebuilds the Docker Compose stack. The server
-needs its own `.env` next to `docker-compose.yml`.
+The app was previously deployed to an AWS EC2 instance; that deployment is not currently running.
+
+`.github/workflows/deploy.yml` is kept for redeploying. It is triggered manually (Actions → Deploy to AWS → Run workflow), SSHes into the host named by the `EC2_HOST`, `EC2_USER` and `EC2_SSH_KEY` repository secrets, pulls the latest code and rebuilds the Docker Compose stack. The server needs its own `.env` next to `docker-compose.yml`.
